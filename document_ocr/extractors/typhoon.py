@@ -52,11 +52,19 @@ class TyphoonExtractor(BaseExtractor):
         self._base_url = ollama_base_url or settings.ollama_base_url
         self._ocr_model = ocr_model or settings.typhoon_ocr_model
         self._struct_model = struct_model or settings.gemma_struct_model
-        self._client = ollama.Client(host=self._base_url)
+        # timeout=600s: cold model load (first request) can take 5–8 min on CPU
+        self._client = ollama.Client(host=self._base_url, timeout=600)
 
     def _ocr_pages(self, images: list[PILImage]) -> str:
-        """Run Typhoon OCR on each page image and return concatenated Markdown."""
+        """Run Typhoon OCR on each page image and return concatenated Markdown.
+
+        Uses keep_alive=0 on the final page to immediately unload the Typhoon
+        model from memory before the struct extraction stage loads Gemma.
+        On a CPU-only server with ≤16 GB RAM, both models cannot be in memory
+        simultaneously.
+        """
         pages_md: list[str] = []
+        last_idx = len(images) - 1
         for i, img in enumerate(images):
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=90)
@@ -71,7 +79,9 @@ class TyphoonExtractor(BaseExtractor):
                         "images": [b64],
                     }
                 ],
-                options={"temperature": 0.0, "top_p": 0.6, "repeat_penalty": 1.1},
+                options={"temperature": 0.0, "top_p": 0.6, "repeat_penalty": 1.1, "num_predict": 4096},
+                # Unload on the last page so Gemma can fit in memory
+                keep_alive=0 if i == last_idx else "5m",
             )
             pages_md.append(f"<!-- Page {i + 1} -->\n{response.message.content}")
         return "\n\n".join(pages_md)

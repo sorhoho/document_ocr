@@ -20,8 +20,8 @@ dependencies = [
     # OCR (Gemma two-stage fallback)
     "pytesseract>=0.3.13",
 
-    # Self-hosted LLM inference
-    "ollama>=0.2",
+    # Self-hosted LLM inference (>=0.4 required for format=dict structured output)
+    "ollama>=0.4",
 
     # Cloud LLM (Gemini + OpenTyphoon API)
     "google-genai>=1.0",
